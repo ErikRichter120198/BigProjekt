@@ -1,102 +1,68 @@
-import React, { useRef, useEffect, useState } from 'react';
-import io from 'socket.io-client';
-import './VideoChat.css';
+// VideoChat.js (Frontend)
+
+import React, { useEffect, useRef, useState } from "react";
+import io from "socket.io-client";
+
+const socket = io("http://localhost:3000"); // Verbindung zum Socket.IO-Server herstellen
 
 const VideoChat = () => {
-  const localVideoRef = useRef(null);
-  const remoteVideoRef = useRef(null);
-  const socketRef = useRef(null);
-  const peerConnectionRef = useRef(null);
-  const [stream, setStream] = useState(null);
-  const initializePeerConnection = () => {
-    
-    
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-    });
+  const localVideoRef = useRef();
+  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [remoteStreams, setRemoteStreams] = useState([]);
 
-    pc.onicecandidate = event => {
-      if (event.candidate) {
-        socketRef.current.emit('candidate', event.candidate);
-      }
-    };
-
-    pc.ontrack = event => {
-      remoteVideoRef.current.srcObject = event.streams[0];
-    };
-
-    return pc;
-  };
-
-  const startVideo = async () => {
-    try {
-      const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localVideoRef.current.srcObject = localStream;
-      setStream(localStream);
-
-      peerConnectionRef.current = initializePeerConnection();
-
-      localStream.getTracks().forEach(track => {
-        peerConnectionRef.current.addTrack(track, localStream);
-      });
-
-      socketRef.current.emit('join');
-
-    } catch (error) {
-      console.error('Error accessing media devices.', error);
-    }
-  };
-  
   useEffect(() => {
-    socketRef.current = io('http://localhost:5000',{
-        withCredentials: true
-         }); 
-
-    startVideo();
-
-    socketRef.current.on('offer', async (id, description) => {
-      if (!peerConnectionRef.current) {
-        peerConnectionRef.current = initializePeerConnection();
-        stream.getTracks().forEach(track => {
-          peerConnectionRef.current.addTrack(track, stream);
-        });
-      }
-
-      await peerConnectionRef.current.setRemoteDescription(description);
-      const answer = await peerConnectionRef.current.createAnswer();
-      await peerConnectionRef.current.setLocalDescription(answer);
-      socketRef.current.emit('answer', id, peerConnectionRef.current.localDescription);
-    });
-
-    socketRef.current.on('answer', async (description) => {
-      await peerConnectionRef.current.setRemoteDescription(description);
-    });
-
-    socketRef.current.on('candidate', async (candidate) => {
+    // Funktion zum Initialisieren der Medienstreams
+    const initMediaStream = async () => {
       try {
-        await peerConnectionRef.current.addIceCandidate(candidate);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        localVideoRef.current.srcObject = stream;
+        socket.emit("stream", stream); // Senden des eigenen Streams an den Server
+
+        socket.on("stream", (socketId, remoteStream) => {
+          setRemoteStreams((prevStreams) => [
+            ...prevStreams,
+            { socketId, stream: remoteStream },
+          ]);
+        });
+
+        socket.on("stopStream", (socketId) => {
+          setRemoteStreams((prevStreams) =>
+            prevStreams.filter((stream) => stream.socketId !== socketId)
+          );
+        });
       } catch (error) {
-        console.error('Error adding received ice candidate', error);
+        console.error("Error accessing media devices.", error);
       }
-    });
+    };
+
+    initMediaStream();
 
     return () => {
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
-      socketRef.current.disconnect();
+      socket.emit("stopStream"); // Beenden des eigenen Streams beim Verlassen
     };
   }, []);
 
+  const toggleCamera = () => {
+    const updatedCameraStatus = !isCameraOn;
+    setIsCameraOn(updatedCameraStatus);
+    socket.emit("toggleCamera", updatedCameraStatus);
+  };
+
   return (
-    <div className="video-container">
-      <div className="video-wrapper">
-        <video ref={localVideoRef} autoPlay muted></video>
-      </div>
-      <div className="video-wrapper">
-        <video ref={remoteVideoRef} autoPlay></video>
-      </div>
-      {/* Füge hier weitere video-wrapper hinzu, wenn neue Teilnehmer beitreten */}
+    <div>
+      <video ref={localVideoRef} autoPlay muted playsInline></video>
+      {remoteStreams.map((remoteStream) => (
+        <video key={remoteStream.socketId} autoPlay playsInline>
+          <track kind="captions" srcLang="en" />
+          Your browser does not support the video tag.
+        </video>
+      ))}
+      <button onClick={toggleCamera}>
+        {isCameraOn ? "Turn Camera Off" : "Turn Camera On"}
+      </button>
     </div>
   );
 };
