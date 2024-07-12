@@ -1,13 +1,33 @@
-// server.js
 const express = require("express");
-const http = require("http");
+const https = require("https");
+const fs = require("fs");
 const socketIo = require("socket.io");
+const path = require("path");
 
 const app = express();
-const server = http.createServer(app);
+
+// Lade dein SSL-Zertifikat und den privaten Schlüssel
+const sslOptions = {
+  key: fs.readFileSync("/etc/ssl/certs/cert.pem"),
+  cert: fs.readFileSync("/etc/ssl/private/key.pem"),
+};
+
+// Erstelle einen HTTPS-Server
+const server = https.createServer(sslOptions, app);
 const io = socketIo(server);
 
 const PORT = process.env.PORT || 3000;
+
+// Leite alle HTTP-Anfragen auf HTTPS um
+app.use((req, res, next) => {
+  if (!req.secure) {
+    return res.redirect("https://" + req.headers.host + req.url);
+  }
+  next();
+});
+
+// Stelle statische Dateien bereit, falls nötig
+app.use(express.static(path.join(__dirname, 'public')));
 
 io.on("connection", (socket) => {
   console.log("Neuer Client verbunden:", socket.id);
@@ -43,4 +63,3 @@ io.on("connection", (socket) => {
 server.listen(PORT, () => {
   console.log(`Server lauscht auf Port ${PORT}`);
 });
-
