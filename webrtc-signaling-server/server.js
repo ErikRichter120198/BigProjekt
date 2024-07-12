@@ -15,6 +15,12 @@ const io = socketIo(server, {
 });
 
 const PORT = 3000;
+app.use(cors( {
+  origin: "*", // Erlaube alle Ursprünge
+  methods: ["GET", "POST"], // Erlaube nur GET- und POST-Anfragen
+  allowedHeaders: ["Content-Type"], // Erlaube nur Header mit Content-Type
+  credentials: true, // Aktiviere Berechtigungen bei Bedarf
+}))
 
 // Verwaltung der Clients und ihrer Kamera-Status
 const clients = new Map(); // Map zur Speicherung von Socket-IDs und Kamera-Status
