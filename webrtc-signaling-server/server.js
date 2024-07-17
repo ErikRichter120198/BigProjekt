@@ -1,65 +1,43 @@
 const express = require("express");
-const https = require("https");
-const fs = require("fs");
+const http = require("http");
 const socketIo = require("socket.io");
-const path = require("path");
-
+const cors = require("cors");
 const app = express();
+const frontendip ="https://www.konferenz1.de"
 
-// Lade dein SSL-Zertifikat und den privaten Schlüssel
-const sslOptions = {
-  key: fs.readFileSync("/etc/ssl/certs/cert.pem"),
-  cert: fs.readFileSync("/etc/ssl/private/key.pem"),
-};
-
-// Erstelle einen HTTPS-Server
-const server = https.createServer(sslOptions, app);
-const io = socketIo(server);
-
-const PORT = process.env.PORT || 3000;
-
-// Leite alle HTTP-Anfragen auf HTTPS um
-app.use((req, res, next) => {
-  if (!req.secure) {
-    return res.redirect("https://" + req.headers.host + req.url);
+app.use(cors({
+  origin: frontendip,
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: frontendip,
+    methods: ["GET", "POST"],
+    credentials: true
   }
-  next();
 });
-
-// Stelle statische Dateien bereit, falls nötig
-app.use(express.static(path.join(__dirname, 'public')));
-
+const PORT = process.env.PORT || 3000;
 io.on("connection", (socket) => {
   console.log("Neuer Client verbunden:", socket.id);
-
-  // Client tritt einem Raum bei
   socket.on("join", (room) => {
     socket.join(room);
-    socket.to(room).emit("user-connected", socket.id);
-
-    // Behandle 'disconnect'
-    socket.on("disconnect", () => {
-      socket.to(room).emit("user-disconnected", socket.id);
-    });
-
-    // Behandle Signalisierungsnachrichten
-    socket.on("offer", (offer, callback) => {
-      socket.to(room).emit("offer", socket.id, offer);
-      callback();
-    });
-
-    socket.on("answer", (answer, callback) => {
-      socket.to(room).emit("answer", socket.id, answer);
-      callback();
-    });
-
-    socket.on("candidate", (candidate, callback) => {
-      socket.to(room).emit("candidate", socket.id, candidate);
-      callback();
-    });
+    socket.to(room).emit("user-connected");
+  });
+  socket.on("offer", (offer, room) => {
+    socket.to(room).emit("offer", offer);
+  });
+  socket.on("answer", (answer, room) => {
+    socket.to(room).emit("answer", answer);
+  });
+  socket.on("candidate", (candidate, room) => {
+    socket.to(room).emit("candidate", candidate);
+  });
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
   });
 });
-
 server.listen(PORT, () => {
   console.log(`Server lauscht auf Port ${PORT}`);
 });
