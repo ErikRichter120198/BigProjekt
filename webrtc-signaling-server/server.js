@@ -23,7 +23,7 @@ const io = socketIo(server, {
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 442;
 
 // Socket.IO Verbindungen behandeln
 io.on("connection", (socket) => {
